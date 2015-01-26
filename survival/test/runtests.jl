@@ -66,3 +66,19 @@ model = fit(CoxPHModel, formula, melanoma)
 for i=1:length(OPTIMAL_PARAMS)
     @test_approx_eq_eps model.model.params[i] OPTIMAL_PARAMS[i] EPS
 end
+
+### Test coeftable
+
+coefs = coeftable(model)
+# Output from R:
+#
+#           Coef    S.E.   Wald Z Pr(>|Z|)
+# sex        0.4481 0.2669  1.68  0.0931
+# age        0.0168 0.0086  1.96  0.0501
+# year      -0.1026 0.0610 -1.68  0.0927
+# thickness  0.1003 0.0382  2.63  0.0087
+# ulcer      1.1946 0.3093  3.86  0.0001
+target = [0.0931, 0.0501, 0.0927, 0.0087, 0.0001]
+for i=1:length(target)
+    @test_approx_eq_eps coefs.mat[i, coefs.pvalcol] target[i] 0.0001
+end

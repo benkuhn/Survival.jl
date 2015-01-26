@@ -3,6 +3,7 @@ module Survival
 using StatsBase
 using Optim
 using DataArrays
+using Distributions
 
 export survec, fit, CoxResp, CoxPHModel, Surv
 

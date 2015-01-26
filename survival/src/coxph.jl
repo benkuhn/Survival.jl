@@ -2,7 +2,7 @@ type CoxPHModel{T} <: RegressionModel
     y::Array{Surv{T}}
     null_like::T
     log_like::T
-    hessian::Matrix{T}  # hessian at the optimized params
+    invhess::Matrix{T}  # inverted hessian at the optimized params
     params::Vector{T}
     optresults::Optim.MultivariateOptimizationResults
 end
@@ -58,6 +58,7 @@ function coxgrad!{T}(X::Matrix{T}, y::Array{Surv{T}}, params::Array{T}, storage:
 end
 
 function coxhess!{T}(X::Matrix{T}, y::Array{Surv{T}}, params::Array{T}, storage::Matrix{T})
+    # TODO this is symmetric...
     n = size(X, 1)
     jmin = 1 # minimum index with exit time equal to current time
     theta = exp(X * params)
@@ -113,8 +114,29 @@ function StatsBase.fit{T<:FloatingPoint}(::Type{CoxPHModel},
     params = results.minimum
     log_like = lh(params)
 
-    hessian = zeros(T, nparam, nparam)::Matrix{T}
-    coxhess!(X, y, params, hessian)
+    invhess = zeros(T, nparam, nparam)::Matrix{T}
+    coxhess!(X, y, params, invhess)
+    invhess = inv(invhess)
+    
+    CoxPHModel(y, null_like, log_like, invhess, params, results)
+end
 
-    CoxPHModel{T}(y, null_like, log_like, hessian, params, results)
+function StatsBase.coeftable{T}(m::CoxPHModel{T})
+    # coef, se, z, P>|Z|, l95, u95
+    COEF, SE, Z, P_GT_Z, L95, U95 = (1:6)
+    colnms = ["Coef", "S.E.", "Z", "P>|Z|", "Lower 95%", "Upper 95%"]
+    coef = m.params
+    mat = zeros(T, length(coef), length(colnms))
+    mat[:, COEF] = coef
+    for i=1:length(coef)
+        se = sqrt(m.invhess[i, i])
+        mat[i, SE] = se
+        mat[i, Z] = coef[i] / se
+        mat[i, P_GT_Z] = cdf(Normal(), -abs(coef[i] / se)) * 2
+        mat[i, L95] = coef[i] - 1.96 * se
+        mat[i, U95] = coef[i] + 1.96 * se
+    end
+
+    rownms = [1:length(coef)]
+    return CoefTable(mat, colnms, rownms, P_GT_Z)
 end
